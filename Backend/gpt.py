@@ -10,7 +10,9 @@ def get_client() -> Groq:
     return Groq(api_key=api_key)
 
 def _model_name(ai_model: str | None) -> str:
-    return ai_model or "llama-3.3-70b-versatile"
+    if not ai_model or "70b" in ai_model or "llama3.2" in ai_model:
+        return "llama-3.1-8b-instant"
+    return ai_model
 
 def generate_script(
     video_subject: str,

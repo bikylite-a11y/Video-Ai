@@ -18,7 +18,7 @@ def main():
     data = {
         "videoSubject": args.subject,
         "voice": args.voice,
-        "aiModel": "llama-3.3-70b-versatile",
+        "aiModel": "llama-3.1-8b-instant",
         "paragraphNumber": 1,
         "customPrompt": "",
         "threads": 2,
