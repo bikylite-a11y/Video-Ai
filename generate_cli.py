@@ -1,12 +1,11 @@
 ﻿import os
 import sys
-import inspect
 import argparse
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from Backend.pipeline import generate_video
+from Backend.pipeline import run_generation_pipeline
 
 def main():
     parser = argparse.ArgumentParser(description="Headless MoneyPrinter Video Generator")
@@ -16,25 +15,27 @@ def main():
 
     print(f"[*] Starting video generation for subject: {args.subject}")
 
-    # Inspect generate_video parameters to support both 'topic' and 'video_subject'
-    sig = inspect.signature(generate_video)
-    params = sig.parameters
+    data = {
+        "videoSubject": args.subject,
+        "voice": args.voice,
+        "aiModel": "llama-3.3-70b-versatile",
+        "paragraphNumber": 1,
+        "customPrompt": "",
+        "threads": 2,
+        "subtitlesPosition": "bottom",
+        "textColor": "#FFFFFF",
+    }
 
-    kwargs = {}
-    if "topic" in params:
-        kwargs["topic"] = args.subject
-    elif "video_subject" in params:
-        kwargs["video_subject"] = args.subject
-    else:
-        # Fallback to first positional argument
-        kwargs[list(params.keys())[0]] = args.subject
+    def on_log(message: str, level: str = "info"):
+        print(f"[{level.upper()}] {message}")
 
-    if "voice" in params:
-        kwargs["voice"] = args.voice
-    if "ai_model" in params:
-        kwargs["ai_model"] = "llama-3.3-70b-versatile"
+    output_path = run_generation_pipeline(
+        data=data,
+        is_cancelled=lambda: False,
+        on_log=on_log,
+        amount_of_stock_videos=5,
+    )
 
-    output_path = generate_video(**kwargs)
     print(f"[+] Generation complete: {output_path}")
 
 if __name__ == "__main__":
