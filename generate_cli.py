@@ -18,11 +18,11 @@ def main():
     data = {
         "videoSubject": args.subject,
         "voice": args.voice,
-        "aiModel": "llama-3.1-8b-instant",
+        "aiModel": "openai/gpt-oss-20b",
         "paragraphNumber": 1,
         "customPrompt": "",
         "threads": 2,
-        "subtitlesPosition": "bottom",
+        "subtitlesPosition": "center,bottom",
         "textColor": "#FFFFFF",
     }
 
