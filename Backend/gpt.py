@@ -9,10 +9,34 @@ def get_client() -> Groq:
         raise ValueError("GROQ_API_KEY is not set in environment variables.")
     return Groq(api_key=api_key)
 
-def _model_name(ai_model: str | None) -> str:
-    if not ai_model or "70b" in ai_model or "llama3.2" in ai_model:
-        return "llama-3.1-8b-instant"
-    return ai_model
+def _get_active_model() -> str:
+    client = get_client()
+    try:
+        models = client.models.list()
+        available_ids = [m.id for m in models.data]
+        print(f"[*] Available Groq models on this account: {available_ids}")
+
+        # Priority list of common chat models
+        preferred = [
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "llama3-8b-8192",
+            "llama3-70b-8192",
+            "mixtral-8x7b-32768",
+            "gemma2-9b-it"
+        ]
+        for candidate in preferred:
+            if candidate in available_ids:
+                return candidate
+
+        # Fallback to the first available non-whisper model
+        text_models = [mid for mid in available_ids if "whisper" not in mid]
+        if text_models:
+            return text_models[0]
+    except Exception as e:
+        print(f"[!] Warning checking models: {e}")
+
+    return "llama3-8b-8192"
 
 def generate_script(
     video_subject: str,
@@ -32,8 +56,11 @@ Requirements:
 {f"Additional instructions: {custom_prompt}" if custom_prompt else ""}
 """.strip()
 
+    model = _get_active_model()
+    print(f"[*] Using Groq model: {model}")
+
     response = get_client().chat.completions.create(
-        model=_model_name(ai_model),
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
     )
@@ -57,8 +84,9 @@ Script context:
 Return only a valid JSON array of strings.
 """.strip()
 
+    model = _get_active_model()
     response = get_client().chat.completions.create(
-        model=_model_name(ai_model),
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.5,
     )
@@ -94,8 +122,9 @@ Return only valid JSON in this format:
 }}
 """.strip()
 
+    model = _get_active_model()
     response = get_client().chat.completions.create(
-        model=_model_name(ai_model),
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.5,
     )
