@@ -1,0 +1,60 @@
+name: Generate Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      subject:
+        description: 'Video Subject / Topic'
+        required: true
+        default: '3 mind-blowing facts about space exploration'
+      voice:
+        description: 'Voice ID'
+        required: false
+        default: 'en_us_001'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies (FFmpeg & ImageMagick)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick
+          # Fix ImageMagick security policy for MoviePy text rendering
+          sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"/<!-- <policy domain="path" rights="none" pattern="@\*" -->/' /etc/ImageMagick-6/policy.xml || true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python Dependencies
+        run: |
+          uv sync
+
+      - name: Run Video Generator
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TIKTOK_SESSION_ID: "dummy_not_needed"
+          IMAGEMAGICK_BINARY: "/usr/bin/convert"
+        run: |
+          uv run python generate_cli.py --subject "${{ github.event.inputs.subject }}" --voice "${{ github.event.inputs.voice }}"
+
+      - name: Upload Generated Video
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-shorts-video
+          path: |
+            temp/*.mp4
+            output.mp4
+          retention-days: 7
