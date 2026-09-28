@@ -1,7 +1,8 @@
 ﻿import json
 import os
 import re
-from groq import Groq
+import time
+from groq import Groq, RateLimitError
 
 def get_client() -> Groq:
     api_key = os.getenv("GROQ_API_KEY")
@@ -16,27 +17,42 @@ def _get_active_model() -> str:
         available_ids = [m.id for m in models.data]
         print(f"[*] Available Groq models on this account: {available_ids}")
 
-        # Priority list of common chat models
         preferred = [
-            "llama-3.3-70b-versatile",
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b",
+            "qwen/qwen3.8-27b",
             "llama-3.1-8b-instant",
-            "llama3-8b-8192",
-            "llama3-70b-8192",
-            "mixtral-8x7b-32768",
-            "gemma2-9b-it"
+            "llama-3.3-70b-versatile"
         ]
         for candidate in preferred:
             if candidate in available_ids:
                 return candidate
 
-        # Fallback to the first available non-whisper model
-        text_models = [mid for mid in available_ids if "whisper" not in mid]
+        text_models = [mid for mid in available_ids if "whisper" not in mid and "guard" not in mid]
         if text_models:
             return text_models[0]
     except Exception as e:
         print(f"[!] Warning checking models: {e}")
 
-    return "llama3-8b-8192"
+    return "qwen/qwen3.8-27b"
+
+def _call_groq_with_retry(model: str, messages: list[dict], temperature: float, max_tokens: int = 350) -> str:
+    client = get_client()
+    for attempt in range(4):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_completion_tokens=max_tokens,
+            )
+            return (response.choices[0].message.content or "").strip()
+        except RateLimitError as e:
+            wait_time = (attempt + 1) * 3
+            print(f"[!] Rate limited on {model}. Retrying in {wait_time}s...")
+            time.sleep(wait_time)
+            if attempt == 3:
+                raise e
 
 def generate_script(
     video_subject: str,
@@ -46,25 +62,24 @@ def generate_script(
     custom_prompt: str = "",
 ) -> str:
     prompt = f"""
-Write a compelling, fast-paced narration script about:
+Write a short, punchy narration script about:
 "{video_subject}"
 
 Requirements:
-- Use approximately {paragraph_number} paragraph(s).
-- Return only narration text.
+- Exactly 1 paragraph, about 90 to 120 words.
+- Return ONLY narration text.
 - Do not include speaker labels, timestamps, scene directions, or quotation marks.
 {f"Additional instructions: {custom_prompt}" if custom_prompt else ""}
 """.strip()
 
     model = _get_active_model()
     print(f"[*] Using Groq model: {model}")
-
-    response = get_client().chat.completions.create(
+    return _call_groq_with_retry(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
+        max_tokens=300
     )
-    return (response.choices[0].message.content or "").strip()
 
 def get_search_terms(
     video_subject: str,
@@ -73,25 +88,21 @@ def get_search_terms(
     ai_model: str | None = None,
 ) -> list[str]:
     prompt = f"""
-Generate exactly {amount} relevant, visually descriptive Pexels stock-video
-search terms for this topic:
+Generate {amount} concise Pexels stock video search terms for:
+"{video_subject}"
 
-{video_subject}
-
-Script context:
-{script}
-
-Return only a valid JSON array of strings.
+Return ONLY a valid JSON array of short strings, e.g. ["space nebula", "telescope", "astronaut"].
 """.strip()
 
     model = _get_active_model()
-    response = get_client().chat.completions.create(
+    time.sleep(1)
+    raw_content = _call_groq_with_retry(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.5,
+        temperature=0.4,
+        max_tokens=150
     )
 
-    raw_content = (response.choices[0].message.content or "").strip()
     match = re.search(r"\[.*\]", raw_content, re.DOTALL)
     if match:
         try:
@@ -109,27 +120,27 @@ def generate_metadata(
     ai_model: str | None = None,
 ) -> tuple[str, str, list[str]]:
     prompt = f"""
-Create YouTube metadata for this short video.
-
+Create YouTube Shorts metadata for:
 Topic: {video_subject}
-Script: {script}
+Script: {script[:200]}
 
 Return only valid JSON in this format:
 {{
   "title": "title",
   "description": "description",
-  "keywords": ["keyword1", "keyword2", "keyword3"]
+  "keywords": ["tag1", "tag2"]
 }}
 """.strip()
 
     model = _get_active_model()
-    response = get_client().chat.completions.create(
+    time.sleep(1)
+    raw_content = _call_groq_with_retry(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.5,
+        temperature=0.4,
+        max_tokens=200
     )
 
-    raw_content = (response.choices[0].message.content or "").strip()
     match = re.search(r"\{.*\}", raw_content, re.DOTALL)
     if match:
         try:
